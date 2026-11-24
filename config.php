@@ -1,22 +1,21 @@
 <?php
 /*
     Database settings.
-    Fill these in with NEW credentials (the old ones were exposed in db.php).
-    On the live server you can instead set the environment variables
-    DB_HOST, DB_USER, DB_PASS, DB_NAME and leave this file as it is.
+    Configured for Supabase IPv4 Pooler
 */
 
 return [
+    'supabase' => [
+        'host' => 'aws-1-ap-south-1.pooler.supabase.com',
+        'port' => 6543,
+        'user' => 'postgres.bmwtijjrsskkbabueibd',
+        'pass' => 'shreyasabiha@gmail.com',
+        'name' => 'postgres',
+    ],
     'local' => [
         'host' => 'localhost',
         'user' => 'root',
-        'pass' => 'CHANGE_ME',
+        'pass' => '',
         'name' => 'campus_lost_found',
-    ],
-    'live' => [
-        'host' => 'CHANGE_ME_HOST',
-        'user' => 'CHANGE_ME_USER',
-        'pass' => 'CHANGE_ME_PASSWORD',
-        'name' => 'CHANGE_ME_DATABASE',
     ],
 ];
