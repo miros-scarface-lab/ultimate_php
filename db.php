@@ -31,10 +31,10 @@ if (!isLocalRequest() && !isHttpsRequest()) {
 
 
 // ==========================================
-// POSTGRESQL / SUPABASE ADAPTER CLASSES
+// PDO ADAPTER CLASSES (SQLITE / POSTGRESQL)
 // ==========================================
 
-class PgsqlResult
+class PdoAdapterResult
 {
     private array $rows;
     private int $cursor = 0;
@@ -61,7 +61,7 @@ class PgsqlResult
 }
 
 
-class PgsqlStatement
+class PdoAdapterStatement
 {
     private PDOStatement $stmt;
     private PDO $pdo;
@@ -90,16 +90,16 @@ class PgsqlStatement
             return $this->stmt->execute($args);
         } catch (PDOException $e) {
             $this->error = $e->getMessage();
-            error_log("Supabase Pgsql execute error: " . $e->getMessage());
+            error_log("PDO execute error: " . $e->getMessage());
             return false;
         }
     }
 
-    public function get_result(): PgsqlResult|false
+    public function get_result(): PdoAdapterResult|false
     {
         try {
             $rows = $this->stmt->fetchAll(PDO::FETCH_ASSOC);
-            return new PgsqlResult($rows);
+            return new PdoAdapterResult($rows);
         } catch (PDOException $e) {
             $this->error = $e->getMessage();
             return false;
@@ -114,7 +114,7 @@ class PgsqlStatement
 }
 
 
-class PgsqlConnection
+class PdoAdapterConnection
 {
     private PDO $pdo;
     public ?string $error = null;
@@ -133,35 +133,35 @@ class PgsqlConnection
 
     private function sanitizeSql(string $sql): string
     {
-        // Strip MySQL backticks for PostgreSQL compatibility
+        // Strip MySQL backticks
         return str_replace('`', '', $sql);
     }
 
-    public function prepare(string $sql): PgsqlStatement|false
+    public function prepare(string $sql): PdoAdapterStatement|false
     {
         try {
             $cleanSql = $this->sanitizeSql($sql);
             $stmt = $this->pdo->prepare($cleanSql);
-            return new PgsqlStatement($stmt, $this->pdo);
+            return new PdoAdapterStatement($stmt, $this->pdo);
         } catch (PDOException $e) {
             $this->error = $e->getMessage();
-            error_log("Supabase Pgsql prepare error: " . $e->getMessage());
+            error_log("PDO prepare error: " . $e->getMessage());
             return false;
         }
     }
 
-    public function query(string $sql): PgsqlResult|bool
+    public function query(string $sql): PdoAdapterResult|bool
     {
         try {
             $cleanSql = $this->sanitizeSql($sql);
             $stmt = $this->pdo->query($cleanSql);
             if ($stmt && $stmt->columnCount() > 0) {
-                return new PgsqlResult($stmt->fetchAll(PDO::FETCH_ASSOC));
+                return new PdoAdapterResult($stmt->fetchAll(PDO::FETCH_ASSOC));
             }
             return true;
         } catch (PDOException $e) {
             $this->error = $e->getMessage();
-            error_log("Supabase Pgsql query error: " . $e->getMessage());
+            error_log("PDO query error: " . $e->getMessage());
             return false;
         }
     }
@@ -179,17 +179,29 @@ class PgsqlConnection
 $dbConfig = require __DIR__ . '/config.php';
 $conn     = null;
 
-// Check if Supabase configuration is active
-$supabaseConfig = $dbConfig['supabase'] ?? null;
-$useSupabase    = !empty(getenv('SUPABASE_HOST')) || 
-                  (!empty($supabaseConfig['host']) && ($supabaseConfig['pass'] ?? '') !== 'CHANGE_ME_SUPABASE_PASSWORD');
+$driver = $dbConfig['driver'] ?? 'sqlite';
+$sqliteFile = $dbConfig['sqlite']['path'] ?? (__DIR__ . '/campus_lost_found.db');
 
-if ($useSupabase) {
-    // SUPABASE (POSTGRESQL) CONNECTION
-    $host = getenv('DB_HOST') ?: ($supabaseConfig['host'] ?? 'db.bmwtijjrsskkbabueibd.supabase.co');
-    $port = getenv('DB_PORT') ?: ($supabaseConfig['port'] ?? 5432);
+if ($driver === 'sqlite' || (file_exists($sqliteFile) && $driver !== 'supabase' && $driver !== 'mysql')) {
+    // 1. LOCAL EMBEDDED SQLITE MODE
+    try {
+        $pdo = new PDO("sqlite:" . $sqliteFile, null, null, [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        ]);
+        $conn = new PdoAdapterConnection($pdo);
+    } catch (PDOException $e) {
+        error_log("SQLite connection failed: " . $e->getMessage());
+        die("Database connection failed. SQLite error: " . $e->getMessage());
+    }
+
+} elseif ($driver === 'supabase' || !empty(getenv('SUPABASE_HOST'))) {
+    // 2. SUPABASE (POSTGRESQL) MODE
+    $supabaseConfig = $dbConfig['supabase'] ?? [];
+    $host = getenv('DB_HOST') ?: ($supabaseConfig['host'] ?? 'aws-1-ap-south-1.pooler.supabase.com');
+    $port = getenv('DB_PORT') ?: ($supabaseConfig['port'] ?? 6543);
     $name = getenv('DB_NAME') ?: ($supabaseConfig['name'] ?? 'postgres');
-    $user = getenv('DB_USER') ?: ($supabaseConfig['user'] ?? 'postgres');
+    $user = getenv('DB_USER') ?: ($supabaseConfig['user'] ?? 'postgres.bmwtijjrsskkbabueibd');
     $pass = getenv('DB_PASS') ?: ($supabaseConfig['pass'] ?? '');
 
     try {
@@ -198,14 +210,14 @@ if ($useSupabase) {
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         ]);
-        $conn = new PgsqlConnection($pdo);
+        $conn = new PdoAdapterConnection($pdo);
     } catch (PDOException $e) {
         error_log("Supabase connection failed: " . $e->getMessage());
         die("Database connection failed. Please check your Supabase credentials in config.php.");
     }
 
 } else {
-    // LOCAL MYSQL CONNECTION
+    // 3. LOCAL MYSQL MODE
     $dbEnv  = isLocalRequest() ? ($dbConfig['local'] ?? []) : ($dbConfig['live'] ?? []);
     $dbHost = getenv('DB_HOST') ?: ($dbEnv['host'] ?? 'localhost');
     $dbUser = getenv('DB_USER') ?: ($dbEnv['user'] ?? 'root');
@@ -216,12 +228,12 @@ if ($useSupabase) {
         $conn = new mysqli($dbHost, $dbUser, $dbPass, $dbName);
         if ($conn->connect_error) {
             error_log("DB connection failed: " . $conn->connect_error);
-            die("Database connection failed. Please configure MySQL or Supabase credentials in config.php.");
+            die("Database connection failed. Please configure MySQL in config.php.");
         }
         $conn->set_charset("utf8mb4");
     } catch (mysqli_sql_exception $e) {
         error_log("DB connection failed: " . $e->getMessage());
-        die("Database connection failed. Please configure MySQL or Supabase credentials in config.php.");
+        die("Database connection failed. Please configure MySQL in config.php.");
     }
 }
 
