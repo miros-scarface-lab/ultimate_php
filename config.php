@@ -5,7 +5,7 @@
 */
 
 return [
-    'driver' => 'sqlite', // 'sqlite', 'supabase', or 'mysql'
+    'driver' => 'auto', // 'auto' (SQLite on localhost, Supabase when deployed), or 'sqlite', 'supabase', 'mysql'
     
     'sqlite' => [
         'path' => __DIR__ . '/campus_lost_found.db',

@@ -15,8 +15,22 @@ function isLocalRequest(): bool
 
 function isHttpsRequest(): bool
 {
-    return !empty($_SERVER['HTTPS']) &&
-           strtolower((string) $_SERVER['HTTPS']) !== 'off';
+    if (!empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off') {
+        return true;
+    }
+    if (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower($_SERVER['HTTP_X_FORWARDED_PROTO']) === 'https') {
+        return true;
+    }
+    if (!empty($_SERVER['HTTP_X_FORWARDED_SSL']) && strtolower($_SERVER['HTTP_X_FORWARDED_SSL']) === 'on') {
+        return true;
+    }
+    if (!empty($_SERVER['HTTP_FRONT_END_HTTPS']) && strtolower($_SERVER['HTTP_FRONT_END_HTTPS']) === 'on') {
+        return true;
+    }
+    if (!empty($_SERVER['SERVER_PORT']) && (int)$_SERVER['SERVER_PORT'] === 443) {
+        return true;
+    }
+    return false;
 }
 
 
@@ -179,10 +193,15 @@ class PdoAdapterConnection
 $dbConfig = require __DIR__ . '/config.php';
 $conn     = null;
 
-$driver = $dbConfig['driver'] ?? 'sqlite';
+$driver = getenv('DB_DRIVER') ?: ($dbConfig['driver'] ?? 'auto');
 $sqliteFile = $dbConfig['sqlite']['path'] ?? (__DIR__ . '/campus_lost_found.db');
 
-if ($driver === 'sqlite' || (file_exists($sqliteFile) && $driver !== 'supabase' && $driver !== 'mysql')) {
+if ($driver === 'auto') {
+    // When running locally, prefer local SQLite; when deployed, prefer Supabase cloud DB
+    $driver = (!isLocalRequest() || !file_exists($sqliteFile)) ? 'supabase' : 'sqlite';
+}
+
+if ($driver === 'sqlite') {
     // 1. LOCAL EMBEDDED SQLITE MODE
     try {
         $pdo = new PDO("sqlite:" . $sqliteFile, null, null, [
@@ -191,11 +210,12 @@ if ($driver === 'sqlite' || (file_exists($sqliteFile) && $driver !== 'supabase' 
         ]);
         $conn = new PdoAdapterConnection($pdo);
     } catch (PDOException $e) {
-        error_log("SQLite connection failed: " . $e->getMessage());
-        die("Database connection failed. SQLite error: " . $e->getMessage());
+        error_log("SQLite connection failed: " . $e->getMessage() . " - falling back to Supabase");
+        $driver = 'supabase';
     }
+}
 
-} elseif ($driver === 'supabase' || !empty(getenv('SUPABASE_HOST'))) {
+if ($driver === 'supabase' || !empty(getenv('SUPABASE_HOST'))) {
     // 2. SUPABASE (POSTGRESQL) MODE
     $supabaseConfig = $dbConfig['supabase'] ?? [];
     $host = getenv('DB_HOST') ?: ($supabaseConfig['host'] ?? 'aws-1-ap-south-1.pooler.supabase.com');
@@ -213,10 +233,19 @@ if ($driver === 'sqlite' || (file_exists($sqliteFile) && $driver !== 'supabase' 
         $conn = new PdoAdapterConnection($pdo);
     } catch (PDOException $e) {
         error_log("Supabase connection failed: " . $e->getMessage());
-        die("Database connection failed. Please check your Supabase credentials in config.php.");
+        // If local sqlite exists, fallback
+        if (file_exists($sqliteFile)) {
+            $pdo = new PDO("sqlite:" . $sqliteFile, null, null, [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            ]);
+            $conn = new PdoAdapterConnection($pdo);
+        } else {
+            die("Database connection failed. Please check your Supabase credentials or database configuration in config.php.");
+        }
     }
 
-} else {
+} elseif ($driver === 'mysql') {
     // 3. LOCAL MYSQL MODE
     $dbEnv  = isLocalRequest() ? ($dbConfig['local'] ?? []) : ($dbConfig['live'] ?? []);
     $dbHost = getenv('DB_HOST') ?: ($dbEnv['host'] ?? 'localhost');
