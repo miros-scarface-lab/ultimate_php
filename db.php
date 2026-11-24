@@ -288,8 +288,9 @@ function verifyPasswordAndUpgrade(
     $idValue
 ): bool {
 
-    if (!empty(password_get_info($storedPassword)['algo'])) {
-        return password_verify($password, $storedPassword);
+    $normalized = preg_replace('/^\$2[ab]\$/', '$2y$', $storedPassword);
+    if (!empty(password_get_info($normalized)['algo'])) {
+        return password_verify($password, $normalized);
     }
 
     if (!hash_equals($storedPassword, $password)) {

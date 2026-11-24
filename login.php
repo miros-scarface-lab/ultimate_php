@@ -51,8 +51,8 @@ $sql = "
         password,
         role
     FROM users
-    WHERE student_id = ?
-       OR email = ?
+    WHERE LOWER(student_id) = LOWER(?)
+       OR LOWER(email) = LOWER(?)
     LIMIT 1
 ";
 
@@ -115,7 +115,7 @@ if ($result->num_rows > 0) {
 
         echo "<script>
             alert('Wrong password.');
-            window.location.href='login.html';
+            window.location.href='login.html?error=Wrong+password.';
         </script>";
 
         exit();
@@ -125,7 +125,7 @@ if ($result->num_rows > 0) {
 
     echo "<script>
         alert('Student ID or Email not found.');
-        window.location.href='login.html';
+        window.location.href='login.html?error=Student+ID+or+Email+not+found.';
     </script>";
 
     exit();
