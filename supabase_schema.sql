@@ -44,14 +44,15 @@ SELECT setval('users_user_id_seq', (SELECT COALESCE(MAX(user_id), 1) FROM users)
 CREATE TABLE found_items (
     found_id SERIAL PRIMARY KEY,
     user_id INT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
-    item_name VARCHAR(100) NOT NULL,
-    category VARCHAR(50) NOT NULL,
+    item_name TEXT NOT NULL,
+    category TEXT NOT NULL,
     description TEXT,
     found_date DATE NOT NULL,
-    found_location VARCHAR(150) NOT NULL,
-    finder_contact_information VARCHAR(100) NOT NULL,
+    found_location TEXT NOT NULL,
+    finder_contact_information TEXT NOT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'Pending',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    item_image TEXT DEFAULT NULL
 );
 
 INSERT INTO found_items (found_id, user_id, item_name, category, description, found_date, found_location, finder_contact_information, status, created_at) VALUES
@@ -77,16 +78,16 @@ SELECT setval('found_items_found_id_seq', (SELECT COALESCE(MAX(found_id), 1) FRO
 CREATE TABLE lost_items (
     lost_id SERIAL PRIMARY KEY,
     user_id INT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
-    item_name VARCHAR(100) NOT NULL,
-    category VARCHAR(50) NOT NULL,
+    item_name TEXT NOT NULL,
+    category TEXT NOT NULL,
     lost_date DATE NOT NULL,
-    lost_location VARCHAR(150) NOT NULL,
-    contact_information VARCHAR(100) NOT NULL,
-    secret_information VARCHAR(255) NOT NULL,
+    lost_location TEXT NOT NULL,
+    contact_information TEXT NOT NULL,
+    secret_information TEXT NOT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'Pending',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     description TEXT,
-    item_image VARCHAR(255) DEFAULT NULL
+    item_image TEXT DEFAULT NULL
 );
 
 INSERT INTO lost_items (lost_id, user_id, item_name, category, lost_date, lost_location, contact_information, secret_information, status, created_at, description, item_image) VALUES
